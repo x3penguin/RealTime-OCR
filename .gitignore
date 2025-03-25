@@ -1,3 +1,5 @@
 # Project exclude paths
 /venv/
 OCR_for_files.py
+/.venv
+/__pycache__

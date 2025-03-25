@@ -294,21 +294,14 @@ def views(mode: int, confidence: int):
     return conf_thresh, color
 
 
-def put_ocr_boxes(boxes, frame, height, crop_width=0, crop_height=0, view_mode=1):
+def put_ocr_boxes(boxes, frame, height, crop_width=0, crop_height=0, view_mode=1, beauty_products=None):
     """
     Draws text bounding boxes at tesseract-specified text location. Also displays compatible (ascii) detected text
     Note: ONLY works with the output from tesseract image_to_data(); image_to_boxes() uses a different output format
-
-    :param boxes: output tuple from tesseract image_to_data() containing text location and text string
-    :param numpy.ndarray frame: CV2 display frame destination
-    :param height: Frame height
-    :param crop_width: (Default 0) Horizontal frame crop amount if OCR was performed on a cropped frame
-    :param crop_height: (Default 0) Vertical frame crop amount if OCR was performed on a cropped frame
-    :param view_mode: View mode to specify style of bounding box
-
-    :return: CV2 frame with bounding boxes, and output text string for detected text
     """
-
+    if beauty_products is None:
+        beauty_products = []
+        
     if view_mode not in [1, 2, 3, 4]:
         raise Exception("A nonexistent view mode was selected. Only modes 1-4 are available")
 
@@ -321,19 +314,30 @@ def put_ocr_boxes(boxes, frame, height, crop_width=0, crop_height=0, view_mode=1
                     x, y, w, h = int(box[6]), int(box[7]), int(box[8]), int(box[9])
                     conf = box[10]
                     word = box[11]
-                    x += crop_width  # If tesseract was performed on a cropped image we need to 'convert' to full frame
-                    y += crop_height
+                    
+                    # Check if the word is a beauty product
+                    is_beauty_product = False
+                    for product in beauty_products:
+                        if product.lower() in word.lower():
+                            is_beauty_product = True
+                            break
+                    
+                    # Only process if it's a beauty product
+                    if is_beauty_product:
+                        x += crop_width
+                        y += crop_height
 
-                    conf_thresh, color = views(view_mode, int(float(conf)))
+                        conf_thresh, color = views(view_mode, int(float(conf)))
 
-                    if int(float(conf)) > conf_thresh:
-                        cv2.rectangle(frame, (x, y), (w + x, h + y), color, thickness=1)
-                        text = text + ' ' + word
+                        if int(float(conf)) > conf_thresh:
+                            cv2.rectangle(frame, (x, y), (w + x, h + y), color, thickness=1)
+                            text = text + ' ' + word
 
         if text.isascii():  # CV2 is only able to display ascii chars at the moment
             cv2.putText(frame, text, (5, height - 5), cv2.FONT_HERSHEY_DUPLEX, 1, (200, 200, 200))
 
     return frame, text
+
 
 
 def put_crop_box(frame: numpy.ndarray, width: int, height: int, crop_width: int, crop_height: int):
@@ -408,7 +412,9 @@ def ocr_stream(crop: list[int, int], source: int = 0, view_mode: int = 1, langua
 
     """
     captures = 0  # Number of still image captures during view session
-
+    beauty_products = ["moisturiser", "facial cleanser", "shampoo", "conditioner", 
+                      "lip balm", "sunscreen", "serum", "toner", "face mask", 
+                      "eye cream", "lotion", "makeup remover", "exfoliator"]
     video_stream = VideoStream(source).start()  # Starts reading the video stream in dedicated thread
     img_wi, img_hi = video_stream.get_video_dimensions()
 
@@ -450,7 +456,9 @@ def ocr_stream(crop: list[int, int], source: int = 0, view_mode: int = 1, langua
         frame = put_language(frame, lang_name)
         frame = put_crop_box(frame, img_wi, img_hi, cropx, cropy)
         frame, text = put_ocr_boxes(ocr.boxes, frame, img_hi,
-                                    crop_width=cropx, crop_height=cropy, view_mode=view_mode)
+                           crop_width=cropx, crop_height=cropy, 
+                           view_mode=view_mode, 
+                           beauty_products=beauty_products)
         # # # # # # # # # # # # # # # # # # # # # # # #
 
         # Photo capture:
